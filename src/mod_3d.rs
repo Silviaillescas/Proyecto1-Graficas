@@ -49,17 +49,40 @@ impl Player {
     }
 
     fn move_forward(&mut self, dist: f32) {
-        self.x += dist * self.angle.cos();
-        self.y += dist * self.angle.sin();
+        let new_x = self.x + dist * self.angle.cos();
+        let new_y = self.y + dist * self.angle.sin();
+        if !self.is_colliding(new_x, self.y) {
+            self.x = new_x;
+        }
+        if !self.is_colliding(self.x, new_y) {
+            self.y = new_y;
+        }
     }
 
     fn move_backward(&mut self, dist: f32) {
-        self.x -= dist * self.angle.cos();
-        self.y -= dist * self.angle.sin();
+        let new_x = self.x - dist * self.angle.cos();
+        let new_y = self.y - dist * self.angle.sin();
+        if !self.is_colliding(new_x, self.y) {
+            self.x = new_x;
+        }
+        if !self.is_colliding(self.x, new_y) {
+            self.y = new_y;
+        }
     }
 
     fn rotate(&mut self, angle: f32) {
         self.angle += angle;
+    }
+
+    fn is_colliding(&self, x: f32, y: f32) -> bool {
+        let maze_x = x as usize;
+        let maze_y = y as usize;
+
+        if maze_x >= MAZE_WIDTH || maze_y >= MAZE_HEIGHT {
+            return true;
+        }
+
+        MAZE[maze_y][maze_x] == 1
     }
 }
 
