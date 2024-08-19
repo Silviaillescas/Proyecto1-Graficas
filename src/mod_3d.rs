@@ -13,6 +13,7 @@ const PLAYER_SPEED: f32 = 0.05;
 const ROTATION_SPEED: f32 = 0.03;
 
 const MINIMAP_SCALE: usize = 5;
+const SCALE: usize = 30; 
 
 pub const MAZE: [[i32; MAZE_WIDTH]; MAZE_HEIGHT] = [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -86,15 +87,34 @@ impl Player {
     }
 }
 
+struct Sprite {
+    x: f32,
+    y: f32,
+    color: u32,
+}
+
+impl Sprite {
+    fn new(x: f32, y: f32, color: u32) -> Self {
+        Sprite { x, y, color }
+    }
+}
+
 pub fn run_3d_with_window(window: &mut Window) {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
     let mut player = Player::new(1.5, 1.5, 0.0);
 
+    // Definir sprites en posiciones específicas del laberinto
+    let sprites = vec![
+        Sprite::new(5.0, 5.0, 0xFF00FF), // Sprite púrpura
+        Sprite::new(10.0, 2.0, 0x00FF00), // Sprite verde
+        Sprite::new(15.0, 7.0, 0x0000FF), // Sprite azul
+    ];
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
         handle_input(&mut player, window);
 
-        draw_3d_view(&mut buffer, &player);
-        draw_minimap(&mut buffer, &player); // Añadimos el minimapa
+        draw_3d_view(&mut buffer, &player, &sprites);
+        draw_minimap(&mut buffer, &player, &sprites); // Añadimos el minimapa
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
 }
@@ -117,7 +137,7 @@ fn handle_input(player: &mut Player, window: &Window) {
     }
 }
 
-fn draw_3d_view(buffer: &mut [u32], player: &Player) {
+fn draw_3d_view(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
     let wall_height = HEIGHT as f32 / 2.0;
 
     for x in 0..WIDTH {
@@ -151,9 +171,46 @@ fn draw_3d_view(buffer: &mut [u32], player: &Player) {
             }
         }
     }
+
+    // Dibujar sprites en la vista 3D
+    for sprite in sprites {
+        draw_sprite(buffer, player, sprite);
+    }
 }
 
-fn draw_minimap(buffer: &mut [u32], player: &Player) {
+fn draw_sprite(buffer: &mut [u32], player: &Player, sprite: &Sprite) {
+    let sprite_dir_x = sprite.x - player.x;
+    let sprite_dir_y = sprite.y - player.y;
+
+    let sprite_dist = (sprite_dir_x * sprite_dir_x + sprite_dir_y * sprite_dir_y).sqrt();
+
+    // Calcular el ángulo del sprite en relación al jugador
+    let sprite_angle = (sprite_dir_y).atan2(sprite_dir_x) - player.angle;
+
+    // Proyectar la posición del sprite en la pantalla
+    let sprite_screen_x = (WIDTH as f32 / 2.0 * (1.0 + sprite_angle.cos())) as isize;
+
+    let sprite_height = (HEIGHT as f32 / sprite_dist) as isize;
+
+    // Ajustar tamaño del sprite para que no se vea tan grande
+    let sprite_height = sprite_height.min(HEIGHT as isize / 2).max(10);
+
+    let draw_start_y = (-sprite_height / 2 + HEIGHT as isize / 2).max(0);
+    let draw_end_y = (sprite_height / 2 + HEIGHT as isize / 2).min(HEIGHT as isize - 1);
+
+    let draw_start_x = (-sprite_height / 2 + sprite_screen_x).max(0);
+    let draw_end_x = (sprite_height / 2 + sprite_screen_x).min(WIDTH as isize - 1);
+
+    for y in draw_start_y..=draw_end_y {
+        for x in draw_start_x..=draw_end_x {
+            if x >= 0 && x < WIDTH as isize && y >= 0 && y < HEIGHT as isize {
+                buffer[(y as usize) * WIDTH + x as usize] = sprite.color;
+            }
+        }
+    }
+}
+
+fn draw_minimap(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
     for y in 0..MAZE_HEIGHT {
         for x in 0..MAZE_WIDTH {
             let color = if MAZE[y][x] == 1 { 0x000000 } else { 0xFFFFFF };
@@ -165,6 +222,13 @@ fn draw_minimap(buffer: &mut [u32], player: &Player) {
     let player_x = (player.x * MINIMAP_SCALE as f32) as usize;
     let player_y = (player.y * MINIMAP_SCALE as f32) as usize;
     fill_rect(buffer, player_x, player_y, MINIMAP_SCALE, MINIMAP_SCALE, 0xFF0000); // Rojo para el jugador
+
+    // Dibujar los sprites en el minimapa
+    for sprite in sprites {
+        let sprite_x = (sprite.x * MINIMAP_SCALE as f32) as usize;
+        let sprite_y = (sprite.y * MINIMAP_SCALE as f32) as usize;
+        fill_rect(buffer, sprite_x, sprite_y, MINIMAP_SCALE, MINIMAP_SCALE, sprite.color);
+    }
 }
 
 fn fill_rect(buffer: &mut [u32], x: usize, y: usize, width: usize, height: usize, color: u32) {
