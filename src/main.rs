@@ -4,17 +4,21 @@ mod welcome_screen;
 mod mod_2d;
 mod mod_3d;
 
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions, Scale};
 
-const WIDTH: usize = 600;
-const HEIGHT: usize = 600;
+const WIDTH: usize = 400;
+const HEIGHT: usize = 400;
 
 fn main() {
     let mut window = Window::new(
         "Laberinto 2D/3D",
         WIDTH,
         HEIGHT,
-        WindowOptions::default(),
+        WindowOptions {
+            resize: true,
+            scale: Scale::X2,
+            ..WindowOptions::default()
+        },
     ).unwrap_or_else(|e| {
         panic!("{}", e);
     });
@@ -41,8 +45,11 @@ fn main() {
                 }
             },
             2 => {
-                mod_3d::run_3d_with_window(&mut window);
-                if window.is_key_down(Key::Key1) {
+                let completed = mod_3d::run_3d_with_window(&mut window);
+                if completed {
+                    mod_3d::draw_success_screen(&mut window);
+                    current_mode = 0; // Regresa a la pantalla de inicio
+                } else if window.is_key_down(Key::Key1) {
                     current_mode = 1; // Cambia a modo 2D
                 } else if window.is_key_down(Key::Backspace) {
                     current_mode = 0; // Regresa a la pantalla de inicio

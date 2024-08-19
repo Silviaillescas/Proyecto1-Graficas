@@ -2,9 +2,10 @@ extern crate minifb;
 
 use minifb::{Window, Key};
 use std::f32::consts::PI;
+use std::time::{Instant, Duration};
 
-const WIDTH: usize = 600;
-const HEIGHT: usize = 600;
+const WIDTH: usize = 400;
+const HEIGHT: usize = 400;
 
 pub const MAZE_WIDTH: usize = 20;
 pub const MAZE_HEIGHT: usize = 20;
@@ -13,7 +14,10 @@ const PLAYER_SPEED: f32 = 0.05;
 const ROTATION_SPEED: f32 = 0.03;
 
 const MINIMAP_SCALE: usize = 5;
-const SCALE: usize = 30; 
+const SCALE: usize = 30;
+
+const EXIT_X: usize = 18;  // Posición de la salida
+const EXIT_Y: usize = 18;
 
 pub const MAZE: [[i32; MAZE_WIDTH]; MAZE_HEIGHT] = [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -87,36 +91,36 @@ impl Player {
     }
 }
 
-struct Sprite {
-    x: f32,
-    y: f32,
-    color: u32,
-}
-
-impl Sprite {
-    fn new(x: f32, y: f32, color: u32) -> Self {
-        Sprite { x, y, color }
-    }
-}
-
-pub fn run_3d_with_window(window: &mut Window) {
+pub fn run_3d_with_window(window: &mut Window) -> bool {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
     let mut player = Player::new(1.5, 1.5, 0.0);
 
-    // Definir sprites en posiciones específicas del laberinto
-    let sprites = vec![
-        Sprite::new(5.0, 5.0, 0xFF00FF), // Sprite púrpura
-        Sprite::new(10.0, 2.0, 0x00FF00), // Sprite verde
-        Sprite::new(15.0, 7.0, 0x0000FF), // Sprite azul
-    ];
+    let mut last_update = Instant::now();
+    let mut frame_count = 0;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         handle_input(&mut player, window);
 
-        draw_3d_view(&mut buffer, &player, &sprites);
-        draw_minimap(&mut buffer, &player, &sprites); // Añadimos el minimapa
+        if player_at_exit(&player) {
+            return true;  // Aquí podrías cambiar de modo o mostrar la pantalla de éxito
+        }
+
+        draw_3d_view(&mut buffer, &player);
+        draw_minimap(&mut buffer, &player);
+
+        // Calcular y mostrar FPS
+        frame_count += 1;
+        if last_update.elapsed() >= Duration::from_secs(1) {
+            let fps = frame_count;
+            frame_count = 0;
+            last_update = Instant::now();
+            draw_fps(&mut buffer, fps);
+        }
+
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
+
+    false
 }
 
 fn handle_input(player: &mut Player, window: &Window) {
@@ -137,7 +141,100 @@ fn handle_input(player: &mut Player, window: &Window) {
     }
 }
 
-fn draw_3d_view(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
+fn player_at_exit(player: &Player) -> bool {
+    let player_x = player.x as usize;
+    let player_y = player.y as usize;
+    player_x == EXIT_X && player_y == EXIT_Y
+}
+
+pub fn draw_success_screen(window: &mut Window) {
+    let mut buffer: Vec<u32> = vec![0x00FF00; WIDTH * HEIGHT]; // Pantalla verde de éxito
+
+    draw_text(&mut buffer, "FIN", WIDTH / 2 - 16, HEIGHT / 2 - 4); // Mostrar "FIN"
+
+    window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+
+    // Esperar a que se presione una tecla para regresar a la pantalla de bienvenida
+    while window.is_open() {
+        if window.is_key_down(Key::Enter) || window.is_key_down(Key::Space) || window.is_key_down(Key::Backspace) {
+            break;
+        }
+    }
+}
+
+fn draw_fps(buffer: &mut [u32], fps: usize) {
+    let text = format!("FPS: {}", fps);
+    draw_text(buffer, &text, 10, 10); // Dibuja el texto FPS en la parte superior izquierda
+}
+
+fn draw_text(buffer: &mut [u32], text: &str, x: usize, y: usize) {
+    let font = get_font();
+    let mut offset_x = x;
+    
+    for ch in text.chars() {
+        if let Some(char_pattern) = font.get(&ch) {
+            draw_char(buffer, char_pattern, offset_x, y);
+            offset_x += 8; // Asumiendo un ancho fijo de 8 píxeles por carácter
+        }
+    }
+}
+
+fn draw_char(buffer: &mut [u32], char_pattern: &[u8], x: usize, y: usize) {
+    for (row, &row_pattern) in char_pattern.iter().enumerate() {
+        for col in 0..8 {
+            if row_pattern & (1 << (7 - col)) != 0 {
+                let pixel_x = x + col;
+                let pixel_y = y + row;
+                if pixel_x < WIDTH && pixel_y < HEIGHT {
+                    buffer[pixel_y * WIDTH + pixel_x] = 0xFFFFFF; // Blanco para las letras
+                }
+            }
+        }
+    }
+}
+
+fn get_font() -> std::collections::HashMap<char, [u8; 8]> {
+    let mut font = std::collections::HashMap::new();
+
+    font.insert('F', [
+        0b11111111,
+        0b10000000,
+        0b10000000,
+        0b11111100,
+        0b10000000,
+        0b10000000,
+        0b10000000,
+        0b10000000,
+    ]);
+
+    font.insert('I', [
+        0b00111100,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00111100,
+    ]);
+
+    font.insert('N', [
+        0b10000010,
+        0b11000010,
+        0b10100010,
+        0b10010010,
+        0b10001010,
+        0b10000110,
+        0b10000010,
+        0b10000010,
+    ]);
+
+    // Puedes agregar más caracteres aquí.
+
+    font
+}
+
+fn draw_3d_view(buffer: &mut [u32], player: &Player) {
     let wall_height = HEIGHT as f32 / 2.0;
 
     for x in 0..WIDTH {
@@ -150,13 +247,13 @@ fn draw_3d_view(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
 
         let line_height = (wall_height / distance_to_wall) as isize;
 
-        // Asegúrate de que draw_start y draw_end estén dentro de los límites
+        
         let draw_start = (HEIGHT as isize / 2) - (line_height / 2).max(0);
         let draw_end = (HEIGHT as isize / 2) + (line_height / 2).min(HEIGHT as isize - 1);
 
         let mut wall_color = create_mosaic_texture(wall_x, wall_y);
 
-        // Aplicar efecto de sombreado
+      
         let shade_factor = 1.0 / distance_to_wall;
         wall_color = apply_shading(wall_color, shade_factor);
 
@@ -171,46 +268,9 @@ fn draw_3d_view(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
             }
         }
     }
-
-    // Dibujar sprites en la vista 3D
-    for sprite in sprites {
-        draw_sprite(buffer, player, sprite);
-    }
 }
 
-fn draw_sprite(buffer: &mut [u32], player: &Player, sprite: &Sprite) {
-    let sprite_dir_x = sprite.x - player.x;
-    let sprite_dir_y = sprite.y - player.y;
-
-    let sprite_dist = (sprite_dir_x * sprite_dir_x + sprite_dir_y * sprite_dir_y).sqrt();
-
-    // Calcular el ángulo del sprite en relación al jugador
-    let sprite_angle = (sprite_dir_y).atan2(sprite_dir_x) - player.angle;
-
-    // Proyectar la posición del sprite en la pantalla
-    let sprite_screen_x = (WIDTH as f32 / 2.0 * (1.0 + sprite_angle.cos())) as isize;
-
-    let sprite_height = (HEIGHT as f32 / sprite_dist) as isize;
-
-    // Ajustar tamaño del sprite para que no se vea tan grande
-    let sprite_height = sprite_height.min(HEIGHT as isize / 2).max(10);
-
-    let draw_start_y = (-sprite_height / 2 + HEIGHT as isize / 2).max(0);
-    let draw_end_y = (sprite_height / 2 + HEIGHT as isize / 2).min(HEIGHT as isize - 1);
-
-    let draw_start_x = (-sprite_height / 2 + sprite_screen_x).max(0);
-    let draw_end_x = (sprite_height / 2 + sprite_screen_x).min(WIDTH as isize - 1);
-
-    for y in draw_start_y..=draw_end_y {
-        for x in draw_start_x..=draw_end_x {
-            if x >= 0 && x < WIDTH as isize && y >= 0 && y < HEIGHT as isize {
-                buffer[(y as usize) * WIDTH + x as usize] = sprite.color;
-            }
-        }
-    }
-}
-
-fn draw_minimap(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
+fn draw_minimap(buffer: &mut [u32], player: &Player) {
     for y in 0..MAZE_HEIGHT {
         for x in 0..MAZE_WIDTH {
             let color = if MAZE[y][x] == 1 { 0x000000 } else { 0xFFFFFF };
@@ -223,12 +283,8 @@ fn draw_minimap(buffer: &mut [u32], player: &Player, sprites: &[Sprite]) {
     let player_y = (player.y * MINIMAP_SCALE as f32) as usize;
     fill_rect(buffer, player_x, player_y, MINIMAP_SCALE, MINIMAP_SCALE, 0xFF0000); // Rojo para el jugador
 
-    // Dibujar los sprites en el minimapa
-    for sprite in sprites {
-        let sprite_x = (sprite.x * MINIMAP_SCALE as f32) as usize;
-        let sprite_y = (sprite.y * MINIMAP_SCALE as f32) as usize;
-        fill_rect(buffer, sprite_x, sprite_y, MINIMAP_SCALE, MINIMAP_SCALE, sprite.color);
-    }
+    // Dibujar la salida en el minimapa
+    fill_rect(buffer, EXIT_X * MINIMAP_SCALE, EXIT_Y * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE, 0x00FF00); // Verde para la salida
 }
 
 fn fill_rect(buffer: &mut [u32], x: usize, y: usize, width: usize, height: usize, color: u32) {
